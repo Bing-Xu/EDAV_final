@@ -1,1 +1,1 @@
-# This is a folder storing analysis scrips and results.
+# This is a folder storing analysis scripts and results.
