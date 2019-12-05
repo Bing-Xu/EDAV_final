@@ -1,0 +1,215 @@
+---
+title: "EDAV_final_project_data_qa"
+author: "Bing Xu"
+date: "11/30/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+#install and load all packages
+library(readr)
+library(dplyr)
+#library(mi)
+library(extracat)
+```
+
+
+37003-0001-Data:
+
+  File Dimensions:
+  • # of Cases: 2106
+  • # of Variables: 207 
+  • Record Length: 864
+
+```{r}
+#### Load Yearly States Population #### 
+state_pop <- subset(read_csv('../data_clean/states_population.csv'), select= -X1)
+#### Add STATE Abbreviation to state_pop ####
+state_abb_name <- data.frame(abb = state.abb, name = state.name)
+add_abb_name<-data.frame("DC","District of Columbia")
+names(add_abb_name)<-c("abb","name")
+state_abb_name<- rbind(state_abb_name,add_abb_name)
+
+
+#### Load Prison Data ####
+nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
+#### Merge with State Population ####
+df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left_join(state_pop, by=c("name" = "name", "YEAR" = "year")) %>% rename(state_name = name)
+#%>% select(YEAR,STATEID,STATE,state_name,Population)
+
+
+#### Survey entity columns ####
+key_cols <- c('YEAR','STATEID','STATE','REGION','state_name','Population')
+major_info <- df[,key_cols]
+
+#### df1 ####
+custody_jurisdiction_inmates_stats <- cbind(major_info, df[,grep("CUSGT1M", colnames(df)):grep("FACROWDF", colnames(df))],
+df[,grep("CUSLT18M", colnames(df)):grep("CUSCTZNF", colnames(df))]) 
+
+#### df2 ####
+race_info <- cbind(major_info, df[, grep("WHITEM", colnames(df)):grep("TOTHCATF", colnames(df))])
+
+#COMMITM:PARNOF
+
+#### df3 ####
+admission_info <- cbind(major_info, df[, grep("ADCRNEWM", colnames(df)):grep("ADTOTF", colnames(df))])
+
+#HANDLEM:HANDLEF
+
+#### df4 ####
+release_info <- cbind(major_info, df[, grep("RLUNEXPM", colnames(df)):grep("RLTOTF", colnames(df))])
+
+#FLOJANM:FLODECF
+
+#### df5 ####
+facility_info <- cbind(major_info, df[, grep("CAPRATEM", colnames(df)):grep("CAPDEST", colnames(df))])
+
+#### df6 ####
+death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOTF", colnames(df))])
+
+#-c(5:7)
+
+# df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left_join(state_pop, by=c("name" = "name", "YEAR" = "year")) %>% select(YEAR,STATEID,STATE,name,Population)
+
+```
+
+
+```{r}
+col_n_distinct_values<- nat_prisoner %>% summarise_all(n_distinct)
+unique(nat_prisoner$REGION )
+```
+state_name and Population are missing together due to the extra states added to the prison data (60 State prison total,
+70 US prison total (state+federal), 99 Federal BOP), which are not in the population table. REGION are missing for 2014-2016 NE from the original data.
+
+PVINCLM and PVINCLF are missing together for one record.
+The question about:
+"On December 31, the inmates under your jurisdiction were housed in a privately-operated correctional facility -- Exclude inmates housed in any publicly-operated facility, even if under contract. Include inmates housed in any
+privately-operated halfway houses, treatment facilities, hospitals, or other special facilities.
+Q: Are these inmates included in the total number of inmates under your jurisdiction?"
+are missing for both male and female in 2016 Arkansas (AR) survey.
+
+LFM and LFF are missing together for one record.
+The question about:
+"On December 31, how many inmates under your jurisdiction were housed in local facilities operated by a county or other local authority? Exclude inmates housed in privately-operated facilities. Include inmates housed in local facilities under
+contract or other arrangement."
+are missing for both male and female in 2016 Oregon (OR) survey.
+
+```{r}
+visna(custody_jurisdiction_inmates_stats, sort = "b")
+```
+```{r}
+```
+
+
+```{r}
+visna(race_info, sort = "b")
+```
+
+```{r}
+visna(admission_info, sort = "b")
+```
+
+
+```{r}
+visna(release_info, sort = "b")
+```
+
+
+```{r}
+visna(facility_info, sort = "b")
+```
+
+
+```{r}
+visna(death_info, sort = "b")
+```
+
+
+```{r}
+#### Load Yearly States Population #### 
+state_pop <- subset(read_csv('../data_clean/states_population.csv'), select= -X1)
+#### Add STATE Abbreviation to state_pop ####
+state_abb_name <- data.frame(abb = state.abb, name = state.name)
+add_abb_name<-data.frame("DC","District of Columbia")
+names(add_abb_name)<-c("abb","name")
+state_abb_name<- rbind(state_abb_name,add_abb_name)
+
+
+#### Load Prison Data ####
+nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
+#### Merge with State Population Reprocess some missing values ####
+df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left_join(state_pop, by=c("name" = "name", "YEAR" = "year")) %>% rename(state_name = name)%>% 
+  mutate(state_name = ifelse(STATEID == 60, 'State prison total',ifelse(STATEID == 70, 'US prison total (state+federal)', ifelse(STATEID==99, 'Federal BOP', state_name))))%>% 
+  mutate(REGION = ifelse((is.na(REGION) & STATEID==31), 2, REGION))
+#%>% select(YEAR,STATEID,STATE,state_name,Population)
+
+
+#### Survey entity columns ####
+key_cols <- c('YEAR','STATEID','STATE','REGION','state_name','Population')
+major_info <- df[,key_cols]
+
+#### df1 ####
+custody_jurisdiction_inmates_stats <- cbind(major_info, df[,grep("CUSGT1M", colnames(df)):grep("FACROWDF", colnames(df))],
+df[,grep("CUSLT18M", colnames(df)):grep("CUSCTZNF", colnames(df))]) 
+
+#### df2 ####
+race_info <- cbind(major_info, df[, grep("WHITEM", colnames(df)):grep("TOTHCATF", colnames(df))])
+
+COMMITM:PARNOF
+
+#### df3 ####
+admission_info <- cbind(major_info, df[, grep("ADCRNEWM", colnames(df)):grep("ADTOTF", colnames(df))])
+
+HANDLEM:HANDLEF
+
+#### df4 ####
+release_info <- cbind(major_info, df[, grep("RLUNEXPM", colnames(df)):grep("RLTOTF", colnames(df))])
+
+FLOJANM:FLODECF
+
+#### df5 ####
+facility_info <- cbind(major_info, df[, grep("CAPRATEM", colnames(df)):grep("CAPDEST", colnames(df))])
+
+#### df6 ####
+death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOTF", colnames(df))])
+
+```
+
+
+```{r}
+b<-death_info %>% filter(STATEID==31)
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
