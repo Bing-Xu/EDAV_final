@@ -30,7 +30,8 @@ plot(pressure)
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 ```{r}
-#install and load all packages
+#### install and load all packages ####
+#devtools::install_github("https://github.com/cran/extracat")
 library(readr)
 library(dplyr)
 #library(mi)
@@ -53,7 +54,6 @@ state_abb_name <- data.frame(abb = state.abb, name = state.name)
 add_abb_name<-data.frame("DC","District of Columbia")
 names(add_abb_name)<-c("abb","name")
 state_abb_name<- rbind(state_abb_name,add_abb_name)
-
 
 #### Load Prison Data ####
 nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
@@ -102,6 +102,7 @@ death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOT
 col_n_distinct_values<- nat_prisoner %>% summarise_all(n_distinct)
 unique(nat_prisoner$REGION )
 ```
+### Missing Data Analysis
 state_name and Population are missing together due to the extra states added to the prison data (60 State prison total,
 70 US prison total (state+federal), 99 Federal BOP), which are not in the population table. REGION are missing for 2014-2016 NE from the original data.
 
@@ -120,34 +121,14 @@ are missing for both male and female in 2016 Oregon (OR) survey.
 
 ```{r}
 visna(custody_jurisdiction_inmates_stats, sort = "b")
-```
-```{r}
-```
-
-
-```{r}
 visna(race_info, sort = "b")
-```
-
-```{r}
 visna(admission_info, sort = "b")
-```
-
-
-```{r}
 visna(release_info, sort = "b")
-```
-
-
-```{r}
 visna(facility_info, sort = "b")
-```
-
-
-```{r}
 visna(death_info, sort = "b")
 ```
 
+### Re-processing data fix missing values###
 
 ```{r}
 #### Load Yearly States Population #### 
@@ -158,7 +139,6 @@ add_abb_name<-data.frame("DC","District of Columbia")
 names(add_abb_name)<-c("abb","name")
 state_abb_name<- rbind(state_abb_name,add_abb_name)
 
-
 #### Load Prison Data ####
 nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
 #### Merge with State Population Reprocess some missing values ####
@@ -166,7 +146,6 @@ df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left
   mutate(state_name = ifelse(STATEID == 60, 'State prison total',ifelse(STATEID == 70, 'US prison total (state+federal)', ifelse(STATEID==99, 'Federal BOP', state_name))))%>% 
   mutate(REGION = ifelse((is.na(REGION) & STATEID==31), 2, REGION))
 #%>% select(YEAR,STATEID,STATE,state_name,Population)
-
 
 #### Survey entity columns ####
 key_cols <- c('YEAR','STATEID','STATE','REGION','state_name','Population')
@@ -199,17 +178,129 @@ death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOT
 
 ```
 
+#### Investigating on Different Missing Types
+Value Label
+-9 (M) Data are missing because the state did not respond to the item
+-8 (M) Data are missing because the item was not applicable to the state
+-2 (M) Item was asked, but only in the aggregate prison population, not by male or female
+-1 (M) Item not asked in survey for this year
 
 ```{r}
-b<-death_info %>% filter(STATEID==31)
+produce_dfs_func <- function(type_of_missing){
+#### Load Yearly States Population #### 
+state_pop <- subset(read_csv('../data_clean/states_population.csv'), select= -X1)
+#### Add STATE Abbreviation to state_pop ####
+state_abb_name <- data.frame(abb = state.abb, name = state.name)
+add_abb_name<-data.frame("DC","District of Columbia")
+names(add_abb_name)<-c("abb","name")
+state_abb_name<- rbind(state_abb_name,add_abb_name)
+
+#### Load Prison Data ####
+nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
+#### Merge with State Population Reprocess some missing values ####
+df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left_join(state_pop, by=c("name" = "name", "YEAR" = "year")) %>% rename(state_name = name)%>% 
+  mutate(state_name = ifelse(STATEID == 60, 'State prison total',ifelse(STATEID == 70, 'US prison total (state+federal)', ifelse(STATEID==99, 'Federal BOP', state_name))))%>% 
+  mutate(REGION = ifelse((is.na(REGION) & STATEID==31), 2, REGION))
+#### replace -9,-8,-2,-1 to NA ####
+if(type_of_missing){
+  df <- df %>% mutate_all(~na_if(., type_of_missing))
+}
+#### Survey entity columns ####
+key_cols <- c('YEAR','STATEID','STATE','REGION','state_name','Population')
+major_info <- df[,key_cols]
+
+#### df1 ####
+custody_jurisdiction_inmates_stats <- cbind(major_info, df[,grep("CUSGT1M", colnames(df)):grep("FACROWDF", colnames(df))],
+df[,grep("CUSLT18M", colnames(df)):grep("CUSCTZNF", colnames(df))]) 
+#### df2 ####
+race_info <- cbind(major_info, df[, grep("WHITEM", colnames(df)):grep("TOTHCATF", colnames(df))])
+#### df3 ####
+admission_info <- cbind(major_info, df[, grep("ADCRNEWM", colnames(df)):grep("ADTOTF", colnames(df))])
+#### df4 ####
+release_info <- cbind(major_info, df[, grep("RLUNEXPM", colnames(df)):grep("RLTOTF", colnames(df))])
+#### df5 ####
+facility_info <- cbind(major_info, df[, grep("CAPRATEM", colnames(df)):grep("CAPDEST", colnames(df))])
+#### df6 ####
+death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOTF", colnames(df))])
+  return(list(custody_jurisdiction_inmates_stats=custody_jurisdiction_inmates_stats, race_info=race_info, admission_info=admission_info, release_info=release_info, facility_info=facility_info, death_info=death_info))
+}
 ```
 
 
 ```{r}
+df_n9<- produce_dfs_func(type_of_missing=-9)
+
+custody_jurisdiction_inmates_stats<- df_n9$custody_jurisdiction_inmates_stats
+race_info<- df_n9$race_info
+admission_info<- df_n9$admission_info
+release_info<- df_n9$release_info
+facility_info<- df_n9$facility_info
+death_info<- df_n9$death_info
+visna(custody_jurisdiction_inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(admission_info, sort = "b")
+visna(release_info, sort = "b")
+visna(facility_info, sort = "b")
+visna(death_info, sort = "b")
+
 ```
 
 
 ```{r}
+df_n8<- produce_dfs_func(type_of_missing=-8)
+
+custody_jurisdiction_inmates_stats<- df_n8$custody_jurisdiction_inmates_stats
+race_info<- df_n8$race_info
+admission_info<- df_n8$admission_info
+release_info<- df_n8$release_info
+facility_info<- df_n8$facility_info
+death_info<- df_n8$death_info
+visna(custody_jurisdiction_inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(admission_info, sort = "b")
+visna(release_info, sort = "b")
+visna(facility_info, sort = "b")
+visna(death_info, sort = "b")
 ```
 
+```{r}
+df_n2<- produce_dfs_func(type_of_missing=-2)
+
+custody_jurisdiction_inmates_stats<- df_n2$custody_jurisdiction_inmates_stats
+race_info<- df_n2$race_info
+admission_info<- df_n2$admission_info
+release_info<- df_n2$release_info
+facility_info<- df_n2$facility_info
+death_info<- df_n2$death_info
+visna(custody_jurisdiction_inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(admission_info, sort = "b")
+visna(release_info, sort = "b")
+visna(facility_info, sort = "b")
+visna(death_info, sort = "b")
+```
+
+```{r}
+df_n1<- produce_dfs_func(type_of_missing=-1)
+
+custody_jurisdiction_inmates_stats<- df_n1$custody_jurisdiction_inmates_stats
+race_info<- df_n1$race_info
+admission_info<- df_n1$admission_info
+release_info<- df_n1$release_info
+facility_info<- df_n1$facility_info
+death_info<- df_n1$death_info
+visna(custody_jurisdiction_inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(admission_info, sort = "b")
+visna(release_info, sort = "b")
+visna(facility_info, sort = "b")
+visna(death_info, sort = "b")
+```
+
+```{r}
+
+```
+```{r}
+
+```
 
