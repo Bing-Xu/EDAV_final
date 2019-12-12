@@ -293,6 +293,16 @@ admission_info<- sub_dfs$admission_info
 release_info<- sub_dfs$release_info
 facility_info<- sub_dfs$facility_info
 death_info<- sub_dfs$death_info
+
+write.csv(df_final, file = "clean_data_original.csv")
+write.csv(custody_jurisdiction_inmates_stats, file = "clean_inmate_original.csv")
+write.csv(race_info, file = "clean_race_original.csv")
+write.csv(admission_info, file = "clean_admission_original.csv")
+write.csv(release_info, file = "clean_release_original.csv")
+write.csv(facility_info, file = "clean_facility_original.csv")
+write.csv(death_info, file = "clean_death_original.csv")
+
+
 ```
 
 ```{r}
@@ -383,6 +393,10 @@ ggplot(inmates_long, aes(YEAR, PVIN, color=gender)) +
 
 
 ```{r fig.height=5,fig.width=8}
+
+write.csv(inmates_long, file = "inmates_long.csv")
+write.csv(inmates_FM, file = "inmates_FM.csv")
+
 #### get state map geo data with longitude and latitude ####
 us_states <- map_data('state')%>% mutate(state_name = capitalize(region)) %>%  select(-c(region, subregion))
 
@@ -402,6 +416,10 @@ ggplot(inmates_FM_map, mapping = aes(x=long, y=lat, group=group, fill=JURTOT)) +
       title = "Total number of inmates under jurisdiction by State by Year")
 
 
+write.csv(inmates_long_map, file = "inmates_long_map.csv")
+write.csv(inmates_FM_map, file = "inmates_FM_map.csv")
+
+
 library(r2d3)
 r2d3("hw4q4b.js", data=c(91, 15, 147, 184))
 ```
@@ -410,10 +428,25 @@ r2d3("hw4q4b.js", data=c(91, 15, 147, 184))
 
 ## Inmate Race Study ##
 ```{r fig.heigh=5, fig.width=8}
+
 library(reshape2)
 names(race_info)
 race_long <- stack_mft(race_info)
 race_longer <-reshape2::melt(race_long %>% select(-c(TOTRACE,NOTHISP,UNKHISP,TOTHCAT)), id = c("YEAR","STATEID","STATE","REGION","state_name","Population", "gender"),  variable = "race", value.name = "inmates_count", na.rm= TRUE)
+
+race_FM <- sum_FM(race_info) %>% 
+              select(-c('STATEID'))
+
+write.csv(race_long, file = "race_long.csv")
+write.csv(race_FM, file = "race_FM.csv")
+
+#### join to race data ####
+race_long_map <- left_join(us_states,race_long, by='state_name')
+race_FM_map <- left_join(us_states,race_FM, by='state_name')
+
+write.csv(race_long_map, file = "race_long_map.csv")
+write.csv(race_FM_map, file = "race_FM_map.csv")
+
 
 ggplot(race_longer %>% group_by(YEAR,state_name, race) %>% summarise(inmates_count= sum(inmates_count)), aes(YEAR, inmates_count, color=race)) + 
   geom_point(size=0.5) + 
@@ -423,6 +456,21 @@ ggplot(race_longer %>% group_by(YEAR,state_name, race) %>% summarise(inmates_cou
 ```
 
 ```{r fig.heigh=5, fig.width=8}
+
+facility_long <- stack_mft(facility_info)
+facility_FM <- sum_FM(facility_info) %>% 
+              select(-c('STATEID'))
+
+write.csv(facility_long, file = "facility_long.csv")
+write.csv(facility_FM, file = "facility_FM.csv")
+
+#### join to facility data ####
+facility_long_map <- left_join(us_states,facility_long, by='state_name')
+facility_FM_map <- left_join(us_states,facility_FM, by='state_name')
+
+write.csv(facility_long_map, file = "facility_long_map.csv")
+write.csv(facility_FM_map, file = "facility_FM_map.csv")
+
 facility_long <- stack_mft(facility_info)
 
 # CAPRATE
