@@ -12,6 +12,6 @@ Edav final project repo
 
 #### Idea
 
-- prison data
+- prison data (finally chose)
 - data science trends
 - health data
