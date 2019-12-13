@@ -19,7 +19,8 @@ The dataset is presented in an untidy format; there is a column for year (1976 -
 
 One issue with the data are missing values.  For example, we hoped to investigate private prisons, but there was a lack of reporting of these data, causing us to not be able to do much meaningful analysis on these populations.  Another issue was lack of total population.  We sought to standardize the incarceration rates over time to the population, so we needed to seek other means to obtaining these data.  A final issue is the lack of tidiness, which took a toll on efficiency and organization of the data.
 
-NEED TIANYAO'S DATA STORY HERE
+We found the population data from Google Public Data, Google shows the data in a line chart, and we tried to crawl that data and finally succeeded. The data result and the script to crawl that data is stored in our Github. Visit our github link for more information:
+https://github.com/TianyaoHan/EDAV_final
 
 # Data Transformation
 
@@ -319,7 +320,15 @@ It appears that the increases in prison population is driven both by by federal 
 
 # Interactive Component
 
-Please see our shiny app at `https://tianyaohan.shinyapps.io/shiny_map/`.
+## Interactive Racial Data
+In the part of Demographic Trends Analysis we analyze the change of the proportion of different races over the past few decades over the whole country. This shiny app casts it down to states level. You can see how the proportion of inmates with different races changed in the past few decades and the diffence of the proportion of diffent states.
+
+You can play with our shiny app at https://tianyaohan.shinyapps.io/shiny_map/
+
+## Interactive States Trends
+In our analysis, we focused on the incarceration rate of different states in the country. As a complement, we designed a shiny app to show the overall inmate population of diffrent state in the United States in the past few decades.
+
+You can play with our shiny app at https://tianyaohan.shinyapps.io/shiny_map/
 
 # Conclusion
 
