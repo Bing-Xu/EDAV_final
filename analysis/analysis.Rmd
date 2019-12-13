@@ -101,7 +101,7 @@ ggplot(state_fed %>%
 
 ```
 
-## Demographic Trends
+### Demographic Trends
 
 The racial breakdown of the prison population between blacks and whites has stayed fairly even over time (implying over-representation of blacks due to their significantly smaller representation in the overall US population).  Other minorities have increased their share of the prison population, in-line with an increased share of the overall population.  The black prison population overtook the white prison population in the years between the 1984 and 1994 crime bills.  This may have been due to the lowered tolerance of drug crimes, although we were unable to obtain the data necessary to investigate this possibility.  From 1994 to 2010, this trend reversed.
 
@@ -184,7 +184,7 @@ ggplot(sex_2 %>%
 
 Aside from the noted subtle trends, race and sex do not alone significantly explain the drastic increases in the prison population.
 
-## State Trends
+### State Trends
 
 Louisiana currently has the highest incarceration rate in the country, followed by Delaware, Oklahoma, Mississippi and Arizona.
 
@@ -261,61 +261,49 @@ ggplot(us_map, mapping = aes(x=long, y=lat, group=group, fill=Change)) +
 
 State dynamics appear to be a significant factor in the increase in prison population, given the major disparities in change of per-capita prison population over time.  While all states have seen considerable increases in per-capita prison population, the south has shown a much larger growth than other regions.
 
-## Private Prison Trends
+### Vacancy Rates
 
-Private prisons 
+One symptom of heightened incarceration rates is overcrowding in prisons.  We can see in the below graph that many states, in 2016, had more prisoners under jurisdiction than their design-specified capacity.  In fact some, states have approximately doubled the original intended capacity of their prisons.  This leads to over-crowding of current prisons or increased funding of new public or private prisons.
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center'}
+fac <- read.csv('../cleaned_data/facility_FM.csv') %>%
+  dplyr::full_join(inmates <- read.csv('../cleaned_data/clean_data_original.csv') %>%
+                     dplyr::select(YEAR, STATE, JURTOTM, JURTOTF, PVINM, PVINF) %>%
+                     dplyr::mutate(JURTOT = JURTOTM + JURTOTF) %>% # + PVINM + PVINF) %>%
+                     dplyr::select(-JURTOTM, -JURTOTF),
+                   by=c("YEAR", "STATE")) %>%
+  dplyr::mutate(Capacity = JURTOT / (CAPDES + PVINM + PVINF),
+                Capacity = ifelse(is.finite(Capacity) & CAPDES != 0, Capacity, NA)) %>%
+                #Capacity = ifelse(Capacity > 1, "Above Capacity",
+                #                  ifelse(Capacity <= 1 & Capacity > 0,
+                #                         "Below Capacity", NA))) %>%
+  dplyr::filter(YEAR == 2013)
 
-#priv <- read.csv('../cleaned_data/clean_data_original.csv') %>%
-#  dplyr::select(YEAR, STATE, PVOTHM, PVOTHF) %>%
-#  dplyr::mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .))) %>%
-#  merge(., state_fed, by=c('YEAR', 'STATE')) %>%
-#  dplyr::mutate(pct_priv = (PVOTHM + PVOTHF) / pris_pop) %>%
-#  dplyr::filter(YEAR == 2016) %>%
-#  full_join(state_mapping %>%
-#              dplyr::mutate(State = tolower(State)), 
-#            by=c('STATE'='Abbrev'))
+us_map_3 <- map_data('state') %>%
+  left_join(fac %>% 
+              merge(., state_mapping, by.x='STATE', by.y='Abbrev') %>%
+              dplyr::mutate(State = tolower(State)),
+            by=c('region' = 'State'))
 
-priv <- read.csv('../cleaned_data/clean_data_original.csv') %>%
-  dplyr::select(YEAR, STATE, PVOTHM, PVOTHF) %>%
-  dplyr::mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .))) %>%
-  merge(., state_fed, by=c('YEAR', 'STATE')) %>%
-  dplyr::mutate(pct_priv = (PVOTHM + PVOTHF) / pris_pop) %>%
-  full_join(state_mapping %>%
-              dplyr::mutate(State = tolower(State)), 
-            by=c('STATE'='Abbrev')) %>%
-  dplyr::filter(STATE=='US')
-
-ggplot(priv, aes(x=YEAR, y=pct_priv)) +
-  geom_line() +
-  xlab("Year") +
-  ylab("Private prison population as a percent of total prison population")
-
-
-
-#us_map_2 <- map_data('state') %>%
-#  full_join(priv, by=c('region'='State'))
-
-#ggplot(us_map_2, mapping = aes(x=long, y=lat, group=group, fill=pct_priv)) +
-#  geom_polygon(color = "gray90", size = 0.1) +
-#  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
-#  scale_fill_viridis_c(option = "magma") +
-#  theme(axis.title.x=element_blank(),
-#        axis.text.x=element_blank(),
-#        axis.ticks.x=element_blank(),
-#        axis.title.y=element_blank(),
-#        axis.text.y=element_blank(),
-#        axis.ticks.y=element_blank()) +
-#  theme(legend.position = "bottom",
-#        strip.background = element_blank())
-
+ggplot(us_map_3, aes(x=long, y=lat, group=group, fill=Capacity)) +
+  geom_polygon(color = "gray90", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  #scale_fill_viridis_c(option = "magma") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  theme(legend.position = "bottom",
+        strip.background = element_blank()) +
+  ggtitle("Total prisoners divided by designed-specified prison capacity, 2016") +
+  theme(legend.position="right")
 ```
 
+### Closing Remarks
 
-## Closing Remarks
-
-It appears that the increases in prison population is driven both by by federal policies, such as the crime bills of 1984 and 1994, as well as state-specific policy.  We expect to have seen a more even increase in per-capita prison populations across states if the primary driver was federal legislation, but the evidence is clear that this is not the case.  However, since all states have seen increases in per-capita prison population, it appears that federal legislation plays a role.
+It appears that the increases in prison population is driven both by by federal policies, such as the crime bills of 1984 and 1994, as well as state-specific policy.  We expect to have seen a more even increase in per-capita prison populations across states if the primary driver was federal legislation, but the evidence is clear that this is not the case.  However, since all states have seen increases in per-capita prison population, it appears that federal legislation plays a role.  Regardless of cause, the evidence is clear that the prison system is currently bloated, demanding either more funding or fewer prisoners.
 
 
 # Interactive Component
