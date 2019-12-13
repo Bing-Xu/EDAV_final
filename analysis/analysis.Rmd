@@ -1,11 +1,35 @@
 ---
-title: "Results"
+title: "Trends in the US Prison System"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+# Introduction
+
+It is oft-mentioned that the United States has the highest per-capita incarceration rate in the developed world.  Politicians across the political spectrum attribute this fact to various factors, causing wide-spread confusion.  Furthermore, there are two major crime bills of the past 40 years, introduced in 1984 (during the Reagan administration) and 1994 (during the Clinton administration).  In this project, we seek to investigate trends in the prison population over the past few decades and draw some conclusions about various potential drivers.  For example, was there a particularly sharp change in the overall population after the implementation of one of these bills?  How has the racial and gender breakdown of the prison population changed over time?  Have certain states contributed more to the increase than others?  With consideration of these questions, we hope to gain a more sophisticated understanding of the recent history of the US prison population.
+
+# Data Sources
+
+We initially had three unrelated potential project ideas worth investigating, and split them up amongst the three of us to investigate data availability.  Jamie was in charge of seeking data for a potential project on the US prison system.  At first, he looked in the Bureau of Prisons, which required lots of phone calls to no avail.  He was eventually directed to the Bureau of Justice Statistics, where he was able to find a large time series dataset.  This was a thorough enough dataset that we chose to commit to this project idea, and it served as the primary data source for the project going forward.
+
+The dataset is presented in an untidy format; there is a column for year (1976 - 2016), a column for state, and about two hundred more columns with numeric values.  In total, there are 2106 rows and 210 columns.  These other columns represent lots of different potentially interesting slices of the prison population.  For example, there are columns for each type of prison, each type of custody, every combination of sex and race, a few sentence types, etc.
+
+One issue with the data are missing values.  For example, we hoped to investigate private prisons, but there was a lack of reporting of these data, causing us to not be able to do much meaningful analysis on these populations.  Another issue was lack of total population.  We sought to standardize the incarceration rates over time to the population, so we needed to seek other means to obtaining these data.  A final issue is the lack of tidiness, which took a toll on efficiency and organization of the data.
+
+NEED TIANYAO'S DATA STORY HERE
+
+# Data Transformation
+
+NEED BING'S STUFF
+
+# Missing Values
+
+NEED BING'S WORK HERE
+
+# Results
 
 ```{r, include=FALSE}
 library(ggplot2)
@@ -47,10 +71,10 @@ race <- read.csv('../cleaned_data/clean_race_original.csv', sep=',') %>%
 
 sex <- read.csv('../cleaned_data/clean_race_original.csv', sep=',') %>%
   mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .))) %>%
-  dplyr::mutate(male = TOTRACEM,
-                female = TOTRACEF) %>%
+  dplyr::mutate(Male = TOTRACEM,
+                Female = TOTRACEF) %>%
   dplyr::select(-Population) %>%
-  dplyr::select(YEAR, STATE, STATEID, male, female) %>%
+  dplyr::select(YEAR, STATE, STATEID, Male, Female) %>%
   merge(., pop, by=c('YEAR', 'STATE'), all.x=T, all.y=F)
 ```
 
@@ -71,11 +95,12 @@ ggplot(state_fed %>%
   geom_line(mapping = aes(x=YEAR, y=pris_pop / 1e6)) +
   ylim(0, 2) +
   xlab("Year") +
-  ylab("Prison population (millions)")
+  ylab("Population (millions)") +
+  ggtitle("US state and federal prison population over time")
 
 ```
 
-# Demographic Trends
+## Demographic Trends
 
 The racial breakdown of the prison population between blacks and whites has stayed fairly even over time (implying over-representation of blacks due to their significantly smaller representation in the overall US population).  Other minorities have increased their share of the prison population, in-line with an increased share of the overall population.  The black prison population overtook the white prison population in the years between the 1984 and 1994 crime bills.  This may have been due to the lowered tolerance of drug crimes, although we were unable to obtain the data necessary to investigate this possibility.  From 1994 to 2010, this trend reversed.
 
@@ -95,9 +120,10 @@ ggplot(race_2 %>%
          dplyr::mutate(Race = factor(Race, levels = c("White", "Black", "Other", "Total"))), 
        aes(x=YEAR)) +
   geom_line(mapping = aes(y=N, colour=Race), stat="identity") +
-  ylab('Prisoners per 10000 capita') +
+  ylab('Prisoners (per 10000 capita)') +
   xlab('Year') +
-  theme(legend.position="right")
+  theme(legend.position="right") +
+  ggtitle("US state and federal prison population over time, by race")
 
 # one with percentages by race as pct of whole
 ggplot(race_2 %>%
@@ -110,9 +136,10 @@ ggplot(race_2 %>%
        aes(x=YEAR)) +
   geom_line(mapping = aes(y=N, colour=Race)) +
   ylim(0, 100) +
-  ylab('Percent of prison population by race') +
+  ylab('Percent of prison population') +
   xlab('Year') +
-  theme(legend.position="right")
+  theme(legend.position="right") +
+  ggtitle('Percent share of total state and federal prison population, by race')
 
 ```
 
@@ -126,35 +153,37 @@ sex_2 <- sex %>%
   dplyr::select(-STATEID)
 
 ggplot(sex_2 %>%
-         dplyr::mutate(male = male / Pop * 10000,
-                       female = female / Pop * 10000) %>%
+         dplyr::mutate(Male = Male / Pop * 10000,
+                       Female = Female / Pop * 10000) %>%
          dplyr::select(-Pop) %>%
          tidyr::gather(key="Sex", value="N", -YEAR, -STATE),
        aes(x=YEAR)) +
   geom_line(mapping = aes(y=N, colour=Sex)) +
-  ylab("Prison population by sex (per 10000 capita)") +
+  ylab("Prison population (per 10000 capita)") +
   xlab("Year") +
-  theme(legend.position="right")
+  theme(legend.position="right") +
+  ggtitle('US state and federal prison population, by sex')
 
 ggplot(sex_2 %>%
-         dplyr::mutate(tot = male + female,
-                       male = male / tot * 100,
-                       female = female / tot * 100) %>%
+         dplyr::mutate(tot = Male + Female,
+                       Male = Male / tot * 100,
+                       Female = Female / tot * 100) %>%
          dplyr::select(-Pop, -tot) %>%
          tidyr::gather(key="Sex", value="N", -YEAR, -STATE),
        aes(x=YEAR)) +
   ylim(0, 100) +
   geom_line(mapping = aes(y=N, colour=Sex)) +
   scale_y_continuous(breaks = seq(0, 100, by=20)) +
-  ylab("Percent of prison population by sex") +
+  ylab("Percent of prison population") +
   xlab("Year") +
-  theme(legend.position="right")
+  theme(legend.position="right") +
+  ggtitle('Percent share of US state and federal prison population, by sex')
 
 ```
 
 Aside from the noted subtle trends, race and sex do not alone significantly explain the drastic increases in the prison population.
 
-# State Trends
+## State Trends
 
 Louisiana currently has the highest incarceration rate in the country, followed by Delaware, Oklahoma, Mississippi and Arizona.
 
@@ -165,14 +194,15 @@ state <- state_fed %>%
                 STATE %notin% c("FE", "ST", "US", "DC")) %>%
   dplyr::mutate(per_cap = pris_pop / total_pop * 10000) %>%
   dplyr::arrange(desc(YEAR), per_cap) %>%
-  dplyr::mutate(YEAR = factor(YEAR),
+  dplyr::mutate(Year = factor(YEAR),
                 STATE = factor(STATE, levels = unique(.$STATE)))
 
-ggplot(state, aes(x=per_cap, y=STATE, colour=YEAR)) +
+ggplot(state, aes(x=per_cap, y=STATE, colour=Year)) +
   geom_point(state="identity", position_dodge=3) +
   theme(legend.position="bottom") +
-  xlab("Prison population by state (per 10000 capita)") +
-  ylab("")
+  xlab("Prison population (per 10000 capita)") +
+  ylab("") +
+  ggtitle("US state and federal prison population, by state")
 
 ```
 
@@ -192,8 +222,9 @@ ggplot(state_2, aes(x=pct_change, y=STATE)) +
   geom_point() +
   #xlim(c(0, 8)) +
   ylab("") +
-  xlab("Increase in per-10000-capita prison population from 1976 to 2016") +
-  xlim(c(0, 60))
+  xlab("Change in prison population (per 10000 capita)") +
+  xlim(c(0, 60)) +
+  ggtitle("Change in per-capita prison population, 1976 to 2016, by state")
   
 ```
 
@@ -205,9 +236,12 @@ us_map <- map_data('state') %>%
   left_join(state_2 %>% 
               merge(., state_mapping, by.x='STATE', by.y='Abbrev') %>%
               dplyr::mutate(State = tolower(State)) %>%
-              dplyr::select(State, pct_change), by=c('region' = 'State'))
+              dplyr::select(State, pct_change) %>%
+              dplyr::mutate(Change = pct_change) %>%
+              dplyr::select(-pct_change), 
+            by=c('region' = 'State'))
 
-ggplot(us_map, mapping = aes(x=long, y=lat, group=group, fill=pct_change)) +
+ggplot(us_map, mapping = aes(x=long, y=lat, group=group, fill=Change)) +
   geom_polygon(color = "gray90", size = 0.1) +
   coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
   scale_fill_viridis_c(option = "magma") +
@@ -218,13 +252,15 @@ ggplot(us_map, mapping = aes(x=long, y=lat, group=group, fill=pct_change)) +
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank()) +
   theme(legend.position = "bottom",
-        strip.background = element_blank())
+        strip.background = element_blank()) +
+  ggtitle("Change in per-capita prison population, 1976 to 2016, by state") +
+  theme(legend.position="right")
 
 ```
 
 State dynamics appear to be a significant factor in the increase in prison population, given the major disparities in change of per-capita prison population over time.  While all states have seen considerable increases in per-capita prison population, the south has shown a much larger growth than other regions.
 
-# Private Prison Trends
+## Private Prison Trends
 
 Private prisons 
 
@@ -276,6 +312,15 @@ ggplot(priv, aes(x=YEAR, y=pct_priv)) +
 ```
 
 
-# Conclusions
+## Closing Remarks
 
 It appears that the increases in prison population is driven both by by federal policies, such as the crime bills of 1984 and 1994, as well as state-specific policy.  We expect to have seen a more even increase in per-capita prison populations across states if the primary driver was federal legislation, but the evidence is clear that this is not the case.  However, since all states have seen increases in per-capita prison population, it appears that federal legislation plays a role.
+
+
+# Interactive Component
+
+Please see our shiny app at `https://tianyaohan.shinyapps.io/shiny_map/`.
+
+# Conclusion
+
+We ran into a few limitations during the project that made things more difficult.  First off, there is no clear-cut story for something as vast and nuanced as the US Prison System, beyond just saying that the size of the population has grown.  Nonetheless, there are many interesting trends to observe, as mentioned in the Results section.  There are two main things that could be done for future steps.  The first is to obtain data on topics in more detail, such as counts for type of crime or size of private prisons.  The second would be to turn an eye toward state-level policy and dig into the weeds of which policies were implemented to drive higher growth in certain states.  These two steps proved nebulous to us given the scarcity of good data and the vastness of state-level legislation.  The biggest lesson we learned is that data is messy in the real world.  The data available to you is often not quite robust enough to do exactly what was originally planned.  However, there is often a story to be found nonetheless based on what is available.  We believe that we gained proficiency at playing to the advantages of the data available.
