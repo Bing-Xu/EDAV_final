@@ -1,0 +1,493 @@
+---
+title: "EDAV_final_project_data_qa"
+author: "Bing Xu"
+date: "11/30/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Prison Data Missing Data Analysis
+
+Install and Load needed packages
+```{r}
+#### install and load all packages ####
+#devtools::install_github("https://github.com/cran/extracat")
+#library(mi)
+#install.packages('choroplethr')
+#install.packages('maps')
+#install.packages("Hmisc")
+#install.packages("ggthemes")
+#install.packages("mapproj")
+# install.packages("corrplot")
+# install.packages('corrgram')
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(extracat)
+library(ggplot2)
+library(choroplethr)
+library(maps)
+library(Hmisc)
+library(viridis)
+library(ggthemes)
+library(mapproj)
+library(reshape2)
+library(corrplot)
+library(corrgram)
+
+library(r2d3)
+r2d3("hw4q4b.js", data=c(91, 15, 147, 184))
+```
+
+```{r}
+
+```
+#### Description of data ####
+
+We use mainly two data sources. 
+
+One is the National Prisoner Statistic Data from United States Department of Justice (Office of Justice Programs. Bureau of Justice Statistics). The data are collected from each state over the years of 1978 to 2016. The data compose of 2106 records with 207 varibles.
+
+The other one is population data of each state over the years, so that we can normalize the results by population.
+
+Also, to be able to plot choropleth map, we also used the latitude and longitude data of the states as well as a lookup table for abbreviation to state names (and vice versa). The prisoner data only have abbreviation while the state population only have full state names.
+
+We created two functions one for loading the raw prisoner data and merge with the state population, and another one for splitting the columns into categories and subsetting for further analysis use since we have 207 columns total for raw prisoner data.It also deal with different missing types.
+
+```{r}
+#### Write two functions #### 
+#### 1. one for load raw data (load_data) 
+#### 2. one for split data (split_df)
+
+load_data <- function(){
+    #### Load Yearly States Population #### 
+    state_pop <- subset(read_csv('../data_clean/states_population.csv'), select= -X1)
+    #### Add STATE Abbreviation to state_pop ####
+    state_abb_name <- data.frame(abb = state.abb, name = state.name)
+    add_abb_name<-data.frame("DC","District of Columbia")
+    names(add_abb_name)<-c("abb","name")
+    state_abb_name<- rbind(state_abb_name,add_abb_name)
+    #### Load Prison Data ####
+    nat_prisoner <- read_tsv('../data_clean/37003-0001-Data.tsv')
+    #### Merge with State Population ####
+    df <- nat_prisoner %>% left_join(state_abb_name, by=c("STATE" = "abb")) %>% left_join(state_pop, by=c("name" = "name", "YEAR" = "year")) %>% rename(state_name = name)
+    return(df)
+    }
+
+split_df<-function(df, type_of_missing=NA){
+  #### replace -9,-8,-2,-1 to NA ####
+  if(type_of_missing %in% c(-9,-8,-2,-1)){
+    df[is.na(df)] <- 'unknown'
+    df <- df %>% mutate_all(~na_if(., type_of_missing))
+    }
+  #### Survey entity columns ####
+  key_cols <- c('YEAR','STATEID','STATE','REGION','state_name','Population')
+  major_info <- df[,key_cols]
+  #### df1 ####
+  inmates_stats <- cbind(major_info, df[,grep("CUSGT1M", colnames(df)):grep("FACROWDF", colnames(df))],
+  df[,grep("CUSLT18M", colnames(df)):grep("CUSCTZNF", colnames(df))]) 
+  #### df2 ####
+  race_info <- cbind(major_info, df[, grep("WHITEM", colnames(df)):grep("TOTHCATF", colnames(df))])
+  #### df3 ####
+  admission_info <- cbind(major_info, df[, grep("ADCRNEWM", colnames(df)):grep("ADTOTF", colnames(df))])
+  #### df4 ####
+  release_info <- cbind(major_info, df[, grep("RLUNEXPM", colnames(df)):grep("RLTOTF", colnames(df))])
+  #### df5 ####
+  facility_info <- cbind(major_info, df[, grep("CAPRATEM", colnames(df)):grep("CAPDEST", colnames(df))])
+  #### df6 ####
+  death_info <- cbind(major_info, df[, grep("DTHEXECM", colnames(df)):grep("DTHTOTF", colnames(df))])
+  
+  return(list(inmates_stats=inmates_stats, race_info=race_info, admission_info=admission_info, release_info=release_info, facility_info=facility_info, death_info=death_info))
+}
+
+```
+
+In this section we load the raw data and and split them in 6 dataframes, and we are more interested in the `inmates_stats`, `race_info`, and `facility_info` dataframes to serve our overall analytic goal. 
+```{r}
+###load raw data and merge them ###
+df <- load_data()
+###split data ###
+sub_dfs<- split_df(df)
+###get split dfs ###
+inmates_stats<- sub_dfs$inmates_stats
+race_info<- sub_dfs$race_info
+admission_info<- sub_dfs$admission_info
+release_info<- sub_dfs$release_info
+facility_info<- sub_dfs$facility_info
+death_info<- sub_dfs$death_info
+```
+
+### Missing Data Analysis ###
+
+```{r fig.height=5, fig.width= 7}
+visna(inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(facility_info, sort = "b")
+```
+#### Base Columns ####
+We can see the graph above that the `state_name` and `Population` are missing together due to the extra states added to the prison data (STATEID 60 for `State prison total`,
+STATEID 70 for `US prison total (state+federal)`, and STATEID 99 for `Federal BOP`), which are not in the population table. REGION are missing for 2014-2016 NE from the original data.
+
+#### Inmates Statistics ####
+PVINCLM and PVINCLF are missing together for one record.
+The columns indicate if these privately inmates housed inmates are included in the total number of inmates under your jurisdiction?"
+They are missing for both male and female in 2016 Arkansas (AR) survey.
+
+LFM and LFF are also missing together for one record.
+The columns are numbers of inmates housed in local facilities (Include local facilities under contract or other arrangement).
+They are missing for both male and female in 2016 Oregon (OR) survey.
+
+#### Race Table and Facility Table ####
+No missing columns except the base columns mentioned above.
+
+
+### Re-processing data and fix missing values ###
+```{r}
+###filling missing values for raw df ###
+df <- df %>% 
+  mutate(state_name = ifelse(STATEID == 60, 'State prison total',ifelse(STATEID == 70, 'US prison total (state+federal)', ifelse(STATEID==99, 'Federal BOP', state_name))))%>% 
+  mutate(REGION = ifelse((is.na(REGION) & STATEID==31), 2, REGION))
+
+###re-process split data ###
+sub_dfs<- split_df(df)
+###get split dfs ###
+inmates_stats<- sub_dfs$inmates_stats
+race_info<- sub_dfs$race_info
+facility_info<- sub_dfs$facility_info
+```
+
+### Investigating on Different Missing Types ###
+
+The missing values in raw without a definite survey reason have been analysis and fixed in the previous steps.
+There are 4 different of missing type in the raw data which was filled with negative number -9, -8, -2, and -1.The meaning of each is described below:
+*-9 Data are missing because the state did not respond to the item
+*-8 Data are missing because the item was not applicable to the state
+*-2 Item was asked, but only in the aggregate prison population, not by male or female
+*-1 Item not asked in survey for this year
+
+#### State did not respond to the item (-9) ####
+```{r fig.height=5, fig.width= 7}
+###re-process split with type -9 missing ###
+df_n9 <- split_df(df, type_of_missing = -9)
+inmates_stats<- df_n9$inmates_stats
+race_info<- df_n9$race_info
+facility_info<- df_n9$facility_info
+
+visna(inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(facility_info, sort = "b")
+```
+*inmates_stats*
+The columns that have the most missing rows due to no response from state in are LFCRINCM and LFCRINCF (the number of State inmates housed in local facilities solely to ease crowding for both male and female).
+Then the second most missing set of columns are LFCROWDF and LFCROWDM (variables to answer How many inmates were housed in local facilities operated by a county or other local authority that is solely to ease prison crowding?).
+And then the FACROWDF and FACROWDM (number of inmates who were housed in another State or in a Federal prison because there was no room for them in state correctional facilities.) comes the next. 
+
+This concludes that the state most have no respond regarding crowding issues. And answers for females are less populated for such questions than that of males.
+
+There are also a chunk of missing happening for questions revolving if certain stats are included in jurisdiction total. For example below, 
+*FACINCLF and FACINCLM (are inmates housed in federal or other states included in total)
+*LFINCLM and LFINCLF (are inmates housed in local facility included in total)
+*PVINCLM and PVINCLF (are inmates housed in private facility included in total)
+
+These usually missing together due to state did not respond to them.
+
+*race_info*
+race information is missing due to state not responding are ranked as below:
+1. ADDRACEM and ADDRACEF (Additional race categories)
+2. NHPIM and NHPIF (Native Hawaiian or other Pacific Islander)
+3. HISPF and HISPM (Hispanic or Latino)
+Many states at certain year might not be able to answer the question of additional race/native hawaiian or other Pacific Islander/Hispanic or do not have any of the categories of inmates.
+
+*facility_info*
+
+CAPRATET - Rated capacity (The number of beds or inmates assigned by rating officials to institutions within your jurisdiction) total
+CAPRATEF - Rated capacity (The number of beds or inmates assigned by rating officials to institutions within your jurisdiction) female
+CAPDEST - Design capacity (The number of inmates that planners or architects intended for all institutions within your jurisdiction) total
+CAPRATEM - Rated capacity (The number of beds or inmates assigned by rating officials to institutions within your jurisdiction) male
+CAPDESF - Design capacity (The number of inmates that planners or architects intended for all institutions within your jurisdiction) female
+CAPDESM - Design capacity (The number of inmates that planners or architects intended for all institutions within your jurisdiction) male
+CAPOPT - Operational capacity (The number of inmates that can be accommodated based on staff, existing programs, and services in institutions within your jurisdiction) total
+CAPOPF - Operational capacity (The number of inmates that can be accommodated based on staff, existing programs, and services in institutions within your jurisdiction) female
+CAPOPM - Operational capacity (The number of inmates that can be accommodated based on staff, existing programs, and services in institutions within your jurisdiction) male
+
+There are patterns that the male and female rated capacity exit but the total rate capacity is not. It is easy to be calculated by male and female added together but the States decided not to answer that column. Same happened to Design capacity and Operational capacity. In the further analysis, we decided to add the Female and male together and by pass the total missing value issue.
+
+
+
+#### Item not applicable to the state (-8) ####
+
+```{r}
+###re-process split with type -8 missing ###
+df_n8 <- split_df(df, type_of_missing = -8)
+
+inmates_stats<- df_n8$inmates_stats
+race_info<- df_n8$race_info
+facility_info<- df_n8$facility_info
+
+visna(inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(facility_info, sort = "b")
+```
+
+#### only in the aggregate prison population, not by male or female (-2)####
+
+```{r}
+###re-process split with type -2 missing ###
+df_n2 <- split_df(df, type_of_missing = -2)
+
+inmates_stats<- df_n2$inmates_stats
+race_info<- df_n2$race_info
+facility_info<- df_n2$facility_info
+
+visna(inmates_stats, sort = "b")
+#visna(race_info, sort = "b") ## no NAs in this data of -2 missing type
+visna(facility_info, sort = "b")
+#visna(death_info, sort = "b") ## no NAs in this data
+```
+
+#### Item not asked in survey for this year (-1) ####
+
+```{r}
+###re-process split with type -1 missing ###
+df_n1 <- split_df(df, type_of_missing = -1)
+
+inmates_stats<- df_n1$inmates_stats
+race_info<- df_n1$race_info
+facility_info<- df_n1$facility_info
+
+visna(inmates_stats, sort = "b")
+visna(race_info, sort = "b")
+visna(facility_info, sort = "b")
+```
+CUSGT1T (CUSTODY WITH MAXIMUM SENTENCE GREATER THAN 1 YEAR, TOTAL (1978-1982 ONLY))
+CUSLT1T (CUSTODY WITH MAXIMUM SENTENCE 1 YEAR OR LESS, TOTAL (1978-1982 ONLY))
+CUSUNST (CUSTODY UNSENTENCED, TOTAL (1978-1982 ONLY))
+CUSTOTT (TOTAL UNDER CUSTODY, TOTAL (1978-1982 ONLY))
+These columns are all for 1978-1982 ONLY and not asked (missing) at the same time, indicating 1978-1982 there is no cutody information is available.
+
+```{r}
+
+```
+
+### finalized dataframe ###
+
+Based on the analysis done above along with the natural of the data and some definition, we are finalizing the dataframe to use for the further analysis.
+
+#### (filled missing values and replaced missing value indicators with NAs) ####
+```{r}
+df_final <- df %>% 
+              mutate_all(~na_if(., -9)) %>% 
+              mutate_all(~na_if(., -8)) %>% 
+              mutate_all(~na_if(., -2)) %>% 
+              mutate_all(~na_if(., -1))
+
+###re-process split data ###
+sub_dfs<- split_df(df_final)
+###get split dfs ###
+inmates_stats<- sub_dfs$inmates_stats
+race_info<- sub_dfs$race_info
+facility_info<- sub_dfs$facility_info
+###export the data ###
+# write.csv(df_final, file = "clean_data_original.csv")
+# write.csv(inmates_stats, file = "clean_inmate_original.csv")
+# write.csv(race_info, file = "clean_race_original.csv")
+# write.csv(facility_info, file = "clean_facility_original.csv")
+```
+
+```{r}
+```
+### Data Transformation ###
+As seen in the exploration above, most survey have been splitted with female, male and sometimes total. Hence, we created two functions to apply two types of data transformation.
+
+`stack_mft` function identifies the male, female, and total columns for each question, and split the dataframe by these columns for male, female and total, and then stacks the three dataframe together with an indication column for F,M, and T. This transform the dataframe from wide to long.
+
+`sum_FM` function approaches a little different, where it sums the female and male for each question together to get the total number to be comparable to the state population.
+
+```{r}
+#### Function to stack Male Female and Total for same variable ####
+stack_mft<- function(df){
+  m_cols<- c("YEAR","STATEID","STATE","REGION","state_name","Population",names(df)[grepl("M$" , names(df))])
+  f_cols<- c("YEAR","STATEID","STATE","REGION","state_name","Population",names(df)[grepl("F$" , names(df))])
+  t_cols<- c("YEAR","STATEID","STATE","REGION","state_name","Population",names(df)[grepl("T$" , names(df))])
+  
+  df_m <- df[m_cols]
+  df_m$gender <- "M"
+  colnames(df_m)[grepl("M$" , names(df_m))] <- str_sub(colnames(df_m)[grepl("M$" , names(df_m))], 1,-2)
+  
+  df_f <- df[f_cols]
+  df_f$gender <- "F"
+  colnames(df_f)[grepl("F$" , names(df_f))] <- str_sub(colnames(df_f)[grepl("F$" , names(df_f))], 1,-2)
+  
+  df_t <- df[t_cols]
+  df_t$gender <- "T"
+  colnames(df_t)[grepl("T$" , names(df_t))] <- str_sub(colnames(df_t)[grepl("T$" , names(df_t))], 1,-2)
+  
+  melted_df<- bind_rows(df_m, df_f, df_t)
+  return(melted_df)
+}
+#### function to sum F and M ####
+sum_FM<- function(df){
+  t_cols<- sort(colnames(df)[grepl("T$" , names(df))])
+  df <- df %>% select(-t_cols)
+  m_cols<- sort(colnames(df)[grepl("M$" , names(df))])
+  f_cols<- sort(colnames(df)[grepl("F$" , names(df))])
+  
+  for (i in 1:length(m_cols)){
+    #print(i)
+    new_name <- str_sub(m_cols[[i]],1,-2)
+    df[new_name] <- rowSums(df[,c(m_cols[[i]], f_cols[[i]])], na.rm=TRUE)
+  }
+  df <- df %>% select(-c(m_cols,f_cols))
+  return(df)
+}
+```
+
+On top of that, we are also interested in looking at the geospatial cluster relationship of the jail data and trend. We use the state level geo data from `maps` package to assist with the need.
+```{r}
+#### get state map geo data with longitude and latitude ####
+us_states <- map_data('state')%>% mutate(state_name = capitalize(region)) %>%  select(-c(region, subregion))
+```
+
+Since the study is focused on inmates under state jurisdiction rather than under custody, we selected all the related columns regarding each state jurisdiction inmate count. It is also a more reliable number to account for locally and privately housed inmates.
+
+#### Data Transformation - inmates study ####
+* Transform the inmate stats dataframe to desired formats
+```{r}
+###select columns of interest (since the study focus is on jurisdiction count)
+inmates_no_need_col <- c('STATEID','CUSGT1','CUSLT1','CUSUNS','CUSTOT','CNOPRIV','CWPRIV',"JURGT1","JURLT1", "JURUNS", "CUSLT18","CUSCTZN","LFCRST")
+
+inmates_long <- stack_mft(inmates_stats) %>% select(-inmates_no_need_col)
+inmates_FM <- sum_FM(inmates_stats) %>% select(-inmates_no_need_col)
+###save formatted data
+# write.csv(inmates_long, file = "inmates_long.csv")
+# write.csv(inmates_FM, file = "inmates_FM.csv")
+```
+
+* Add geospatial data and plot
+```{r fig.height=5,fig.width=8}
+#### long/lat state data join to inmates data ####
+inmates_long_map <- left_join(us_states,inmates_long, by='state_name')
+inmates_FM_map <- left_join(us_states,inmates_FM, by='state_name')
+### save data ###
+#write.csv(inmates_long_map, file = "inmates_long_map.csv")
+#write.csv(inmates_FM_map, file = "inmates_FM_map.csv")
+### feed in map ###
+ggplot(inmates_FM_map, mapping = aes(x=long, y=lat, group=group, fill=JURTOT)) +
+  geom_polygon(color = "gray90", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_viridis_c(option = "plasma") + 
+  theme_map() + facet_wrap(~ YEAR, ncol = 6) +
+  theme(legend.position = "bottom",
+        strip.background = element_blank()) +
+  labs(fill = "Total number of inmates under jurisdiction",
+      title = "Total number of inmates under jurisdiction by State by Year")
+```
+
+*Total number of inmates under your jurisdiction by year
+```{r fig.heigh=5, fig.width=6}
+##Total number of inmates under your jurisdiction##
+ggplot(inmates_long, aes(YEAR, JURTOT, color=gender)) +
+  geom_point(size=0.05) +
+  facet_wrap(~state_name,scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "Total number of inmates under jurisdiction by State over Years")
+```
+*Total number of inmates housed in private facilities by year
+```{r fig.heigh=5, fig.width=6}
+ggplot(inmates_long, aes(YEAR, PVIN, color=gender)) + 
+  geom_point(size=0.05) + 
+  facet_wrap(~state_name,scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "Number of privately housed inmates by State over Years")
+```
+
+
+#### Data Transformation - inmate race study ####
+* Transform the race info dataframe to desired format
+```{r fig.heigh=5, fig.width=8}
+race_long <- stack_mft(race_info)
+race_longer <-reshape2::melt(race_long %>% select(-c(TOTRACE,NOTHISP,UNKHISP,TOTHCAT)), id = c("YEAR","STATEID","STATE","REGION","state_name","Population", "gender"),  variable = "race", value.name = "inmates_count", na.rm= TRUE)
+
+race_FM <- sum_FM(race_info) %>% filter(!STATEID %in% c(60,70,99)) %>% 
+              select(-c('STATEID','TOTRACE','TOTHCAT','NOTHISP','UNKHISP','UNKRACE'))
+```
+
+* Add geospatial data and plot
+```{r fig.heigh=6, fig.width=10}
+#### long/lat state data join to race data ####
+race_long_map <- left_join(us_states,race_long, by='state_name')
+race_FM_map <- left_join(us_states,race_FM, by='state_name')
+
+### save data ###
+#write.csv(race_long, file = "race_long.csv")
+#write.csv(race_FM, file = "race_FM.csv")
+#write.csv(race_long_map, file = "race_long_map.csv")
+#write.csv(race_FM_map, file = "race_FM_map.csv")
+gathered_race_FM <- gather(race_FM, "race", "inmates_count", -c(1:5), na.rm = TRUE)
+ggplot(gathered_race_FM, aes(fill=race, y=inmates_count, x=STATE)) + geom_bar(position="fill", stat="identity")+
+facet_wrap(~ YEAR, ncol = 5)+
+theme(axis.text.x = element_text(angle = 90))+
+labs(title = "Race proportion of inmates by State by Years")
+
+```
+
+
+#### Data Transformation -  facility study ####
+* Transform the facility info dataframe to desired format and Add geospatial data and plot
+```{r fig.heigh=5, fig.width=8}
+
+facility_long <- stack_mft(facility_info)
+facility_FM <- sum_FM(facility_info) %>% 
+              select(-c('STATEID'))
+
+#### long/lat state data join to facility data ####
+facility_long_map <- left_join(us_states,facility_long, by='state_name')
+facility_FM_map <- left_join(us_states,facility_FM, by='state_name')
+
+### save data ###
+# write.csv(facility_long, file = "facility_long.csv")
+# write.csv(facility_FM, file = "facility_FM.csv")
+# write.csv(facility_long_map, file = "facility_long_map.csv")
+# write.csv(facility_FM_map, file = "facility_FM_map.csv")
+
+# CAPRATE
+#Rated capacity (The number of beds or inmates assigned by rating officials to institutions within your jurisdiction)
+ggplot(facility_long, aes(YEAR, CAPRATE, color=gender)) + 
+  geom_point(size=0.05) + 
+  facet_wrap(~state_name,scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "Jail rated capacity by State over Years")
+```
+Above is an example usage of the reshaped data.
+
+
+```{r}
+### correlation plot ###
+data = inmates_FM %>% left_join(facility_FM %>% select(-c('STATE','REGION','Population')), by=c('YEAR','state_name')) %>% left_join(race_FM %>% select(-c('STATE','REGION','Population')), by=c('YEAR','state_name'))%>% select(-c('STATE','REGION','LFCRINC','LFCRINC','state_name'))
+corrplot(corrgram(data),type = "upper")+
+labs(title = "Correlation of inmates columns")
+```
+
+```{r}
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
